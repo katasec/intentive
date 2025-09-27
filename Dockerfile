@@ -12,34 +12,30 @@ ARG TARGETARCH
 RUN if [ "$TARGETARCH" = "arm64" ]; then \
         dotnet publish src/Intentive.Console/Intentive.Console.csproj -c Release -o /app/publish \
         --self-contained true --runtime linux-musl-arm64 \
-        -p:PublishSingleFile=true -p:PublishTrimmed=true; \
+        -p:RuntimeIdentifier=linux-musl-arm64; \
     else \
         dotnet publish src/Intentive.Console/Intentive.Console.csproj -c Release -o /app/publish \
         --self-contained true --runtime linux-musl-x64 \
-        -p:PublishSingleFile=true -p:PublishTrimmed=true; \
+        -p:RuntimeIdentifier=linux-musl-x64; \
     fi
 
-# Runtime stage - absolute minimal Alpine
-FROM alpine:3.19 AS runtime
+# Runtime stage - .NET runtime on Alpine
+FROM mcr.microsoft.com/dotnet/runtime:9.0-alpine AS runtime
 WORKDIR /app
 
-# Install only essential dependencies
-RUN apk add --no-cache \
-    ca-certificates \
-    libstdc++ \
-    libgcc \
-    && adduser -D -H -s /sbin/nologin appuser
+# Create app user
+RUN adduser -D -H -s /sbin/nologin appuser
 
-# Copy single binary and models
-COPY --from=build /app/publish/Intentive.Console ./intentive
+# Copy published application and models
+COPY --from=build /app/publish/ ./
 COPY models/ ./models/
 
 # Set permissions and ownership
-RUN chmod +x intentive && chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /app
 USER appuser
 
 # Minimal environment
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
     DOTNET_RUNNING_IN_CONTAINER=true
 
-ENTRYPOINT ["./intentive"]
+ENTRYPOINT ["dotnet", "Intentive.Console.dll"]

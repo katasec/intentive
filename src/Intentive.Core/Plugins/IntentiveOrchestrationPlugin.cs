@@ -15,13 +15,13 @@ namespace Intentive.Core.Plugins;
 /// </summary>
 public class IntentiveOrchestrationPlugin
 {
-    private readonly ILogger<IntentiveOrchestrationPlugin> _logger;
+    private readonly ILogger _logger;
     private readonly OrchestrationConfig _config;
     private readonly Stopwatch _stopwatch;
     private readonly SimpleIntentClassifier _intentClassifier;
 
     public IntentiveOrchestrationPlugin(
-        ILogger<IntentiveOrchestrationPlugin> logger,
+        ILogger logger,
         OrchestrationConfig config)
     {
         _logger = logger;

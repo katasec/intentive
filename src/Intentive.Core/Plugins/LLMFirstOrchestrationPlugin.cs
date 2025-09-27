@@ -14,12 +14,12 @@ namespace Intentive.Core.Plugins;
 /// </summary>
 public class LLMFirstOrchestrationPlugin
 {
-    private readonly ILogger<LLMFirstOrchestrationPlugin> _logger;
+    private readonly ILogger _logger;
     private readonly OrchestrationConfig _config;
     private readonly Stopwatch _stopwatch;
 
     public LLMFirstOrchestrationPlugin(
-        ILogger<LLMFirstOrchestrationPlugin> logger,
+        ILogger logger,
         OrchestrationConfig config)
     {
         _logger = logger;

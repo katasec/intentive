@@ -11,9 +11,9 @@ namespace Intentive.Core.Tools;
 /// </summary>
 public class GetOrderTool
 {
-    private readonly ILogger<GetOrderTool> _logger;
+    private readonly ILogger _logger;
 
-    public GetOrderTool(ILogger<GetOrderTool> logger)
+    public GetOrderTool(ILogger logger)
     {
         _logger = logger;
     }

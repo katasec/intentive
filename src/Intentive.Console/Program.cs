@@ -62,6 +62,10 @@ class Program
                 builder.AddConsole();
             }
         });
+        
+        // Register ILogger explicitly to fix DI for plugins
+        kernelBuilder.Services.AddSingleton<ILogger>(serviceProvider => 
+            serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Intentive"));
 
         // Configure OpenTelemetry with SigNoz Cloud support (default OFF)
         if (config.Observability.EnableOtel)
