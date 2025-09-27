@@ -1,236 +1,110 @@
 # Intentive - Fit-for-Purpose AI Orchestration
 
-A production-ready AI orchestration system that uses the right AI tool for each job, implementing a deterministic-first approach with intelligent escalation.
+Experimental implementation exploring a deterministic-first approach to AI orchestration. The core hypothesis is that most AI systems over-rely on large language models where simpler approaches would suffice.
 
-## Design Philosophy: Fit-for-Purpose AI
+## Design Hypothesis
 
-The most effective way to build with AI is to avoid the "one-tool-to-rule-them-all" trap. Instead, use **deterministic code** for orchestration and rules, **lightweight models** for intent classification, and only escalate to **larger LLMs** when ambiguity truly demands it.
+Current AI applications often default to LLMs for every task, creating unnecessary latency, cost, and unpredictability. This implementation tests an alternative approach:
 
-### Why This Approach Works
-- ⚡ **Cuts costs** - Lightweight models handle 80%+ of requests  
-- 🚀 **Reduces latency** - Fast local ONNX inference (50ms vs 500ms)
-- 🎯 **Lowers hallucinations** - Deterministic paths reduce probabilistic hops
-- 📋 **Keeps workflows reliable** - Auditable execution paths with quality indicators
-- 🔍 **Maintains efficiency** - Resources used proportionally to complexity
-- 🛡️ **Enhances control** - Multi-layer quality assurance with automatic refinement
+1. Use deterministic code for orchestration and business rules
+2. Use lightweight models (ONNX) for intent classification
+3. Escalate to LLMs only when ambiguity requires it
 
-## Architecture & Flow
+The goal is to understand the trade-offs between system complexity and operational characteristics like latency, cost, and reliability.
+
+## Implementation Architecture
+
+The system implements a multi-stage pipeline with escalation points:
 
 ```
 User Request
     ↓
-🚪 Rule Gate (heuristics, fast paths)
+Rule Gate (heuristic filtering)
     ↓
-🧠 ONNX Intent Classifier (MiniLM-L6-v2, ~50ms)
-    ├─→ [high confidence] → Plan Generator → Validator → Tools
+ONNX Intent Classifier (MiniLM-L6-v2)
+    ├─→ [high confidence] → Plan Generation → Tool Execution
     └─→ [low confidence/high risk] → LLM Escalation
-        ├─→ Plan Generation (JSON structured)
-        ├─→ Quality Indicators (confidence, relevance, specificity)  
-        ├─→ Response Refinement (if insufficient)
-        └─→ Direct LLM Response (when no tools match)
+        ├─→ Structured plan generation
+        ├─→ Quality evaluation
+        └─→ Response refinement if needed
 ```
 
-### Orchestration Layers
+### Components
 
-1. **Rule Gate** - Fast heuristic filtering and simple pattern matching
-2. **ONNX Classification** - 86MB MiniLM model for intent decoding via embeddings + cosine similarity
-3. **Plan Validation** - Schema validation and constraint checking  
-4. **Tool Execution** - Deterministic business logic (e.g., order lookups)
-5. **Quality Indicators** - Multi-stage response evaluation:
-   - Plan quality (confidence scores, intent-tool mismatches)
-   - Response quality (relevance, specificity, deflection detection)
-   - Automatic refinement when quality thresholds not met
+**Rule Gate**: Pattern matching for common cases (greetings, simple queries)
+**ONNX Classifier**: 86MB MiniLM model doing embedding-based intent classification
+**Plan Validator**: Schema validation and business rule checking
+**Quality Indicators**: Multi-layer evaluation of response adequacy
+**Tool Execution**: Deterministic business logic (order lookups, etc.)
 
-### Execution Paths
+### Observed Execution Paths
 
-The system provides **full visibility** into decision-making:
+- `RuleGate → FastPath` - Pattern-matched responses
+- `RuleGate → OnnxClassifier → ToolExecution` - High-confidence classification
+- `RuleGate → OnnxClassifier → LLMEscalation → QualityEvaluation` - Complex requests
+- `RuleGate → OnnxClassifier → LLMEscalation → ResponseRefinement` - Quality-driven retry
 
-- `RuleGate → FastPath` - Simple greetings, cached responses
-- `RuleGate → MiniLMClassifier → CheapLMProbe → ToolExecution` - Standard flow  
-- `RuleGate → MiniLMClassifier → LLMEscalation → QualityEscalation` - Complex requests
-- `RuleGate → MiniLMClassifier → LLMEscalation → QualityEscalation → ResponseRefinement` - Quality-driven refinement
+## Running the Implementation
 
-## Getting Started
+**Prerequisites**: .NET 9.0 SDK, OpenAI-compatible API key
 
-### Prerequisites
-- .NET 9.0 SDK
-- PowerShell 7+ (for environment setup)
-- OpenAI-compatible API key (OpenAI, Groq, etc.)
-
-### Quick Start
-
-1. **Clone and build:**
 ```bash
-git clone <repo-url>
+git clone https://github.com/katasec/intentive.git
 cd intentive
 make build
-```
 
-2. **Set up API credentials:**
-```powershell
-# PowerShell (recommended)
-$env:OPENAI_API_KEY = "your-api-key-here"
-$env:OPENAI_BASE_URL = "https://api.groq.com/openai/v1"  # Optional: for Groq
+# Set API credentials
+export OPENAI_API_KEY="your-key"
+export OPENAI_BASE_URL="https://api.groq.com/openai/v1"  # Optional
 
-# Or Bash  
-export OPENAI_API_KEY="your-api-key-here"
-export OPENAI_BASE_URL="https://api.groq.com/openai/v1"
-```
-
-3. **Run the system:**
-```bash
 make run
 ```
 
-4. **Test different execution paths:**
+**Test cases to observe different execution paths:**
 ```
-> what is the status of order 12345?    # → Tool execution
-> what's today's date?                  # → LLM escalation  
-> hello                                 # → Rule gate fast path
-> help me with something complex        # → Quality refinement
+> what is the status of order 12345?    # Tool execution path
+> what's today's date?                  # LLM escalation path
+> hello                                 # Rule gate fast path
+> help me with something complex        # Quality refinement path
 ```
 
-## Project Structure
+## Structure
 
 ```
-intentive/
-├── src/
-│   ├── Intentive.Core/           # Core orchestration logic
-│   │   ├── Configuration/        # Config models and binding
-│   │   ├── Models/               # Domain models and records
-│   │   ├── Plugins/              # Orchestration plugins
-│   │   ├── Services/             # ONNX intent classifier
-│   │   └── Tools/                # Business logic tools
-│   └── Intentive.Console/        # CLI application
-├── tests/
-│   └── Intentive.Tests/          # Unit and integration tests
-├── models/                       # ONNX models (86MB MiniLM)
-│   ├── all-MiniLM-L6-v2.onnx    # Main embedding model
-│   ├── tokenizer.json           # Tokenizer configuration
-│   └── vocab.txt                # Vocabulary file
-├── Makefile                      # Build, test, and run targets
-└── README.md                     # This file
+src/Intentive.Core/     # Core orchestration logic
+src/Intentive.Console/  # CLI interface
+models/                 # ONNX models (MiniLM-L6-v2)
+tests/                  # Tests
+Makefile                # Build targets
 ```
 
 ## Configuration
 
-The system uses a layered configuration approach:
+Key parameters (environment variables or command line):
 
-1. **Environment variables** (highest priority)
-2. **Command line arguments**  
-3. **Default values**
+- `OPENAI_API_KEY` - API key for LLM escalation
+- `OPENAI_BASE_URL` - Custom endpoint (Groq, Azure, etc.)
+- Intent thresholds in `OrchestrationConfig.cs`:
+  - `ConfidenceThreshold`: 0.7 (ONNX classification confidence)
+  - `AmbiguityThreshold`: 0.5 (triggers LLM escalation)
+  - `RiskThreshold`: 0.8 (high-risk escalation)
 
-### Key Settings
-
-```json
-{
-  "Mode": "Intentive",                    # Orchestration strategy
-  "OpenAI": {
-    "ApiKey": "env:OPENAI_API_KEY",      # API key from environment
-    "BaseUrl": "env:OPENAI_BASE_URL",    # Optional: custom endpoint
-    "CheapModel": "gpt-4o-mini",         # For planning/classification
-    "EscalationModel": "gpt-4"           # For complex requests
-  },
-  "Intent": {
-    "ModelPath": "./models/all-MiniLM-L6-v2.onnx",  # ONNX model
-    "ConfidenceThreshold": 0.7,          # Classification confidence
-    "AmbiguityThreshold": 0.5,           # Escalation trigger
-    "RiskThreshold": 0.8                 # High-risk escalation
-  }
-}
-```
-
-## Development
-
-### Available Make Targets
+## Build Targets
 
 ```bash
-make build          # Build solution
-make test           # Run tests with LLM output
-make run            # Run with clean console (logs to file)
-make run-verbose    # Run with console logs  
-make confidence     # Full environment + LLM connectivity test
-make check-env      # Validate development setup
+make build      # Build solution
+make test       # Run tests
+make run        # Run with clean console
+make confidence # Full connectivity test
 ```
 
-### Adding New Tools
+## Performance Observations
 
-1. Create a tool class implementing semantic kernel patterns:
-```csharp
-public class MyTool
-{
-    [KernelFunction("my_function")]
-    public async Task<string> ExecuteAsync(string parameter) 
-    {
-        // Business logic here
-        return result;
-    }
-}
-```
+- ONNX Classification: ~50ms (local inference)
+- Rule Gate: <5ms (pattern matching)  
+- LLM Escalation: 200-800ms (network dependent)
+- Memory Usage: ~186MB (base + ONNX model)
 
-2. Register in `Program.cs`:
-```csharp
-kernelBuilder.Plugins.AddFromType<MyTool>();
-```
+## Notes
 
-3. Update intent patterns in `SimpleIntentClassifier.cs`
-
-### Quality Indicators
-
-The system includes sophisticated quality evaluation:
-
-**Plan Quality Indicators:**
-- Confidence scores below thresholds
-- Intent-tool mismatches (e.g., cooking question → GetOrder tool)
-- Generic/vague intents
-- Missing actionable steps
-
-**Response Quality Indicators:**  
-- Response relevance to user question
-- Generic/deflecting responses
-- Insufficient specificity
-- Multiple quality issues
-
-**Automatic Refinement:**
-When quality indicators trigger, the system automatically:
-1. Re-prompts with specific guidance
-2. Provides context about quality issues  
-3. Requests more direct, helpful responses
-
-## Performance Characteristics
-
-- **ONNX Classification**: ~50ms (local inference)
-- **Rule Gate**: <5ms (pattern matching)
-- **LLM Escalation**: 200-800ms (depending on endpoint)
-- **Tool Execution**: 10-100ms (business logic dependent)
-- **Memory Usage**: ~100MB base + 86MB ONNX model
-
-## API Compatibility
-
-Works with any OpenAI-compatible API:
-- **OpenAI GPT models** (gpt-4, gpt-4o-mini, etc.)
-- **Groq** (llama-3.1-8b-instant, etc.)
-- **Azure OpenAI**
-- **Local LLMs** via OpenAI-compatible servers
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Run `make confidence` to validate
-5. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Design Credits
-
-This implementation is based on fit-for-purpose AI principles:
-- Deterministic code handles orchestration and rules
-- Lightweight models decode intent  
-- LLMs used only when ambiguity demands it
-- Multiple quality checkpoints ensure reliable results
-
-The architecture avoids the "one-tool-to-rule-them-all" trap while maintaining the flexibility to handle complex requests when needed.
+This is an experimental exploration of alternatives to LLM-first architectures. The implementation uses Microsoft Semantic Kernel for LLM integration and Microsoft.ML.OnnxRuntime for local model inference.
