@@ -1,16 +1,18 @@
 # Intentive - Fit-for-Purpose AI Orchestration
 
-Experimental implementation exploring a deterministic-first approach to AI orchestration. The core hypothesis is that most AI systems over-rely on large language models where simpler approaches would suffice.
+Most agentic AI solutions use LLMs for workflow orchestration - essentially deploying something that knows the history of humanity to execute business logic. This is like using a cannon to kill a mosquito.
 
-## Design Hypothesis
+Workflow automation worked efficiently for decades before LLMs existed. The key insight is that AI's primary value should be as a **translator** - converting human intent into deterministic code paths, not replacing the execution engine itself.
 
-Current AI applications often default to LLMs for every task, creating unnecessary latency, cost, and unpredictability. This implementation tests an alternative approach:
+## Implementation Approach
 
-1. Use deterministic code for orchestration and business rules
-2. Use lightweight models (ONNX) for intent classification
-3. Escalate to LLMs only when ambiguity requires it
+This implementation separates intent translation from workflow execution:
 
-The goal is to understand the trade-offs between system complexity and operational characteristics like latency, cost, and reliability.
+1. **Intent Translation**: Lightweight ONNX models classify user requests into actionable intents
+2. **Workflow Execution**: Traditional deterministic code handles business logic
+3. **LLM Escalation**: Only when human intent cannot be reliably mapped to existing workflows
+
+The hypothesis is that this separation yields better latency, cost, and reliability characteristics than LLM-driven orchestration while maintaining the human-friendly interface that makes AI valuable.
 
 ## Implementation Architecture
 
