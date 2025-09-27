@@ -14,6 +14,34 @@ This implementation separates intent translation from workflow execution:
 
 The hypothesis is that this separation yields better latency, cost, and reliability characteristics than LLM-driven orchestration while maintaining the human-friendly interface that makes AI valuable.
 
+## 🚀 Quick Start with Docker
+
+Try the implementation immediately without any setup using Docker:
+
+```bash
+# Run with Groq (fast, free API)
+docker run -e OPENAI_API_KEY=your-groq-key -e OPENAI_BASE_URL=https://api.groq.com/openai/v1 ghcr.io/katasec/intentive:latest
+
+# Run with OpenAI
+docker run -e OPENAI_API_KEY=your-openai-key ghcr.io/katasec/intentive:latest
+
+# Without API key (shows usage)
+docker run ghcr.io/katasec/intentive:latest
+```
+
+**Test different execution paths:**
+```
+> what is the status of order 12345?    # Deterministic tool execution
+> hello                                 # Fast rule-based response 
+> what's today's date?                  # LLM escalation
+> help me with something complex        # Quality-driven refinement
+```
+
+**Get a Groq API key** (free, fast):
+1. Visit [console.groq.com](https://console.groq.com)
+2. Sign up and create an API key
+3. Use with the Docker command above
+
 ## Implementation Architecture
 
 The system implements a multi-stage pipeline with escalation points:
@@ -46,9 +74,9 @@ ONNX Intent Classifier (MiniLM-L6-v2)
 - `RuleGate → OnnxClassifier → LLMEscalation → QualityEvaluation` - Complex requests
 - `RuleGate → OnnxClassifier → LLMEscalation → ResponseRefinement` - Quality-driven retry
 
-## Running the Implementation
+## Development Setup
 
-**Prerequisites**: .NET 9.0 SDK, OpenAI-compatible API key
+**For development** (requires .NET 9.0 SDK):
 
 ```bash
 git clone https://github.com/katasec/intentive.git
@@ -62,13 +90,7 @@ export OPENAI_BASE_URL="https://api.groq.com/openai/v1"  # Optional
 make run
 ```
 
-**Test cases to observe different execution paths:**
-```
-> what is the status of order 12345?    # Tool execution path
-> what's today's date?                  # LLM escalation path
-> hello                                 # Rule gate fast path
-> help me with something complex        # Quality refinement path
-```
+**Docker is recommended** for trying the implementation - see the Quick Start section above.
 
 ## Structure
 
@@ -93,11 +115,20 @@ Key parameters (environment variables or command line):
 
 ## Build Targets
 
+**Local Development:**
 ```bash
 make build      # Build solution
-make test       # Run tests
+make test       # Run tests  
 make run        # Run with clean console
 make confidence # Full connectivity test
+```
+
+**Docker:**
+```bash
+make docker-build    # Build Docker image
+make docker-run      # Run container (uses your env vars)
+make docker-push     # Push to GitHub Container Registry
+make docker-pull     # Pull published image
 ```
 
 ## Performance Observations
