@@ -165,20 +165,62 @@ info: check-env check-llm-env ## Show complete project and environment informati
 	@echo ""
 
 ##@ Docker Commands
+# Docker image configuration
+DOCKER := /usr/local/bin/docker
+DOCKER_REGISTRY := ghcr.io
+DOCKER_NAMESPACE := katasec
+DOCKER_IMAGE := intentive
+DOCKER_TAG ?= latest
+DOCKER_FULL_NAME := $(DOCKER_REGISTRY)/$(DOCKER_NAMESPACE)/$(DOCKER_IMAGE):$(DOCKER_TAG)
+
 .PHONY: docker-build
-docker-build: ## Build minimal Docker image with Alpine base
-	@echo "$(CYAN)🐳 Building Docker image...$(RESET)"
-	docker build -t intentive:latest .
+docker-build: ## Build Docker image for GitHub Container Registry
+	@echo "$(CYAN)🐳 Building Docker image: $(DOCKER_FULL_NAME)$(RESET)"
+	$(DOCKER) build -t $(DOCKER_FULL_NAME) -t $(DOCKER_IMAGE):latest .
 
 .PHONY: docker-run
 docker-run: ## Run Docker container with environment variables
-	@echo "$(CYAN)🚀 Running Docker container...$(RESET)"
-	docker run -it --rm \
+	@echo "$(CYAN)🚀 Running Docker container: $(DOCKER_FULL_NAME)$(RESET)"
+	$(DOCKER) run -it --rm \
 		-e OPENAI_API_KEY="$$OPENAI_API_KEY" \
 		-e OPENAI_BASE_URL="$$OPENAI_BASE_URL" \
-		intentive:latest --mode intentive
+		$(DOCKER_FULL_NAME) --mode intentive
+
+.PHONY: docker-push
+docker-push: docker-build ## Push Docker image to GitHub Container Registry
+	@echo "$(CYAN)📤 Pushing Docker image to GHCR...$(RESET)"
+	@echo "$(YELLOW)Make sure you're logged in: $(DOCKER) login ghcr.io$(RESET)"
+	$(DOCKER) push $(DOCKER_FULL_NAME)
+
+.PHONY: docker-pull
+docker-pull: ## Pull Docker image from GitHub Container Registry
+	@echo "$(CYAN)📥 Pulling Docker image from GHCR...$(RESET)"
+	$(DOCKER) pull $(DOCKER_FULL_NAME)
 
 .PHONY: docker-size
 docker-size: ## Show Docker image size
-	@echo "$(CYAN)📊 Docker image size:$(RESET)"
-	docker images intentive:latest --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"
+	@echo "$(CYAN)📊 Docker image sizes:$(RESET)"
+	@$(DOCKER) images $(DOCKER_FULL_NAME) --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" 2>/dev/null || echo "$(YELLOW)Image not found locally. Run 'make docker-build' first.$(RESET)"
+	@$(DOCKER) images $(DOCKER_IMAGE):latest --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" 2>/dev/null || true
+
+.PHONY: docker-login
+docker-login: ## Login to GitHub Container Registry
+	@echo "$(CYAN)🔑 Logging into GitHub Container Registry...$(RESET)"
+	@echo "$(YELLOW)Enter your GitHub Personal Access Token when prompted$(RESET)"
+	$(DOCKER) login ghcr.io
+
+.PHONY: docker-info
+docker-info: ## Show Docker configuration
+	@echo "$(CYAN)🐳 Docker Configuration:$(RESET)"
+	@echo "$(YELLOW)• Full Image Name:$(RESET) $(DOCKER_FULL_NAME)"
+	@echo "$(YELLOW)• Registry:$(RESET) $(DOCKER_REGISTRY)"
+	@echo "$(YELLOW)• Namespace:$(RESET) $(DOCKER_NAMESPACE)"
+	@echo "$(YELLOW)• Image:$(RESET) $(DOCKER_IMAGE)"
+	@echo "$(YELLOW)• Tag:$(RESET) $(DOCKER_TAG)"
+	@echo ""
+	@echo "$(CYAN)📋 Available Docker Commands:$(RESET)"
+	@echo "  make docker-build    # Build image locally"
+	@echo "  make docker-push     # Push to GHCR"
+	@echo "  make docker-pull     # Pull from GHCR"
+	@echo "  make docker-run      # Run container"
+	@echo "  make docker-login    # Login to GHCR"

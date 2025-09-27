@@ -271,7 +271,7 @@ public class SimpleFileLogger : ILogger
         _writer = writer;
     }
 
-    public IDisposable BeginScope<TState>(TState state) => null!;
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
     public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
 
