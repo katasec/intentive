@@ -2,13 +2,10 @@
 
 Most agentic AI solutions use LLMs for workflow orchestration - essentially deploying something that knows the history of humanity to execute business logic. This is like using a cannonball to kill a mosquito.
 
-| Source | Key Point | Quote (Workflow-Orchestration Emphasis) | Link |
-|--------|-----------|------------------------------------------|------|
-| Retool - State of AI (H1 2024) | Survey: workflow automation rising as an AI use case | "Companies are realizing ROI not from chat interfaces but from plugging AI into workflows — where automation saves time immediately." | [Read here →](https://retool.com/blog/state-of-ai-h1-2024) |
-| Retool Blog (2025) | Workflow automation jumped YoY from 13% → 18% | "We saw a big jump in AI used for workflow automation... the fastest-growing category of adoption this year." | [Read here →](https://retool.com/blog/state-of-ai-h1-2024) |
-| Zapier Case Study (Remote.com, 2025) | 11M tasks automated; 27.5% IT tickets resolved via AI | "Remote saved hundreds of hours by using AI to route and resolve IT tickets automatically." | [Read here →](https://zapier.com/blog/remote-ai-automation-case-study/) |
-| LangChain - Is LangGraph Used in Production? | Enterprises use LangGraph for reliable/observable workflows | "The key driver for LangGraph adoption is making agents reliable, observable, and controllable in production workflows." | [Read here →](https://blog.langchain.com/is-langgraph-used-in-production/) |
-| OpenAI - Business Guide to Deploying AI (Apr 2025) | Value comes from operationalizing repeatable workflow use cases | "The highest value use cases come from embedding AI into business processes and workflows, not stand-alone reasoning." | [Read here →](https://openai.com/index/business-guide-to-deploying-ai/) |
+| Source | Key Point | Quote (Workflow-Orchestration Emphasis) |
+|--------|-----------|------------------------------------------|
+| [Retool - State of AI (H1 2024)](https://retool.com/blog/state-of-ai-h1-2024) | Workflow automation jumped YoY from 13% → 18% | "We saw a big jump in AI used for workflow automation... the fastest-growing category of adoption this year." |
+| [LangChain - Is LangGraph Used in Production?](https://blog.langchain.com/is-langgraph-used-in-production/) | Enterprises use LangGraph for reliable/observable workflows | "The key driver for LangGraph adoption is making agents reliable, observable, and controllable in production workflows." |
 
 Workflow automation worked efficiently for decades before LLMs existed. The key insight is that AI's primary value should be as a **translator** - converting human intent into deterministic code paths, not replacing the execution engine itself.
 
