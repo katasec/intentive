@@ -163,3 +163,22 @@ info: check-env check-llm-env ## Show complete project and environment informati
 	@echo "$(YELLOW)• Solution:$(RESET) $$(find . -name "*.sln" | head -1)"
 	@echo "$(YELLOW)• Test Projects:$(RESET) $$(find . -name "*Tests.csproj" | wc -l | tr -d ' ')"
 	@echo ""
+
+##@ Docker Commands
+.PHONY: docker-build
+docker-build: ## Build minimal Docker image with Alpine base
+	@echo "$(CYAN)🐳 Building Docker image...$(RESET)"
+	docker build -t intentive:latest .
+
+.PHONY: docker-run
+docker-run: ## Run Docker container with environment variables
+	@echo "$(CYAN)🚀 Running Docker container...$(RESET)"
+	docker run -it --rm \
+		-e OPENAI_API_KEY="$$OPENAI_API_KEY" \
+		-e OPENAI_BASE_URL="$$OPENAI_BASE_URL" \
+		intentive:latest --mode intentive
+
+.PHONY: docker-size
+docker-size: ## Show Docker image size
+	@echo "$(CYAN)📊 Docker image size:$(RESET)"
+	docker images intentive:latest --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}"

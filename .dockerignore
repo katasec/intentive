@@ -1,0 +1,26 @@
+# Build artifacts
+**/bin/
+**/obj/
+**/publish/
+
+# Logs and temporary files
+*.log
+test_*.txt
+intentive.log
+
+# Git and IDE
+.git/
+.gitignore
+.vscode/
+.vs/
+
+# Documentation
+README.md
+warp.md
+
+# Test files
+tests/
+
+# OS files
+.DS_Store
+Thumbs.db
