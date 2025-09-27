@@ -1,6 +1,10 @@
 # Intentive - Fit-for-Purpose AI Orchestration
 
-Most agentic AI solutions use LLMs for workflow orchestration - essentially deploying something that knows the history of humanity to execute business logic. This is like using a cannon to kill a mosquito.
+Most agentic AI solutions use LLMs for workflow orchestration - essentially deploying something that knows the history of humanity to execute business logic. This is like using a cannonball to kill a mosquito.
+
+**The industry is recognizing this problem.** Recent surveys show workflow automation is the fastest-growing AI adoption category, jumping from 13% to 18% year-over-year ([Retool State of AI H1 2024](https://retool.com/blog/state-of-ai-h1-2024)). Companies like [Remote.com automated 11M tasks and resolved 27.5% of IT tickets via AI](https://zapier.com/blog/remote-ai-automation-case-study/), while enterprises choose [LangGraph specifically for "reliable, observable, and controllable" production workflows](https://blog.langchain.com/is-langgraph-used-in-production/).
+
+The pattern is clear: **ROI comes from embedding AI into existing business processes, not replacing them with chat interfaces.**
 
 Workflow automation worked efficiently for decades before LLMs existed. The key insight is that AI's primary value should be as a **translator** - converting human intent into deterministic code paths, not replacing the execution engine itself.
 
