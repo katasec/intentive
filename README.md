@@ -51,41 +51,45 @@ docker run ghcr.io/katasec/intentive:latest
 
 Simple 3-stage pipeline optimized for speed and cost-efficiency:
 
+<div align="center">
+
 ```
-┌─────────────────┐
-│   User Request  │
-└─────────┬───────┘
-          ↓
-   ┌─────────────────────────────────────┐
-   │         Rule Gate                   │  ←── <5ms
-   │  • Pattern matching (hi/hello)     │  
-   │  • Input validation (length)       │  
-   │  • Fast path responses             │  
-   └─────────┬───────────────────────────┘
-             ↓ [continue]
-   ┌─────────────────────────────────────┐
-   │    ONNX Intent Classifier          │  ←── ~50ms
-   │  • MiniLM-L6-v2 (86MB local)      │  
-   │  • Embedding-based classification  │  
-   │  • Confidence + Risk scoring       │  
-   └─────┬─────────────┬─────────────────┘
-         ↓             ↓
-   [confident]    [uncertain/risky]
-         ↓             ↓
- ┌──────────────┐ ┌────────────────────────┐
- │ Deterministic│ │    LLM Escalation      │  ←── 200-800ms
- │ Tool Executor│ │ • GPT-4o-mini/Groq     │  
- │ • GetOrder   │ │ • Plan generation      │  
- │ • Validation │ │ • Tool orchestration   │  
- │ • Fast paths │ │ • Response composition │  
- └──────┬───────┘ └─────────┬──────────────┘
-        ↓                   ↓
-        └─────┬─────────────┘
-              ↓
-    ┌─────────────────┐
-    │ Response to User│
-    └─────────────────┘
+              ┌─────────────────┐
+              │   User Request  │
+              └─────────┬───────┘
+                        ↓
+        ┌─────────────────────────────────────┐
+        │         Rule Gate                   │  ←── <5ms
+        │  • Pattern matching (hi/hello)      │  
+        │  • Input validation (length)        │  
+        │  • Fast path responses              │  
+        └─────────┬───────────────────────────┘
+                  ↓ [continue]
+        ┌─────────────────────────────────────┐
+        │    ONNX Intent Classifier           │  ←── ~50ms
+        │  • MiniLM-L6-v2 (86MB local)        │  
+        │  • Embedding-based classification   │  
+        │  • Confidence + Risk scoring        │  
+        └─────┬─────────────┬─────────────────┘
+              ↓             ↓
+        [confident]    [uncertain/risky]
+              ↓             ↓
+      ┌──────────────┐ ┌────────────────────────┐
+      │ Deterministic│ │    LLM Escalation      │  ←── 200-800ms
+      │ Tool Executor│ │ • GPT-4o-mini/Groq     │  
+      │ • GetOrder   │ │ • Plan generation      │  
+      │ • Validation │ │ • Tool orchestration   │  
+      │ • Fast paths │ │ • Response composition │  
+      └──────┬───────┘ └─────────┬──────────────┘
+             ↓                   ↓
+             └─────┬─────────────┘
+                   ↓
+         ┌─────────────────┐
+         │ Response to User│
+         └─────────────────┘
 ```
+
+</div>
 
 ### Components
 
