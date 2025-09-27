@@ -51,45 +51,35 @@ docker run ghcr.io/katasec/intentive:latest
 
 Simple 3-stage pipeline optimized for speed and cost-efficiency:
 
-<div align="center">
-
 ```
-              ┌─────────────────┐
-              │   User Request  │
-              └─────────┬───────┘
-                        ↓
-        ┌─────────────────────────────────────┐
-        │         Rule Gate                   │  ←── <5ms
-        │  • Pattern matching (hi/hello)      │  
-        │  • Input validation (length)        │  
-        │  • Fast path responses              │  
-        └─────────┬───────────────────────────┘
-                  ↓ [continue]
-        ┌─────────────────────────────────────┐
-        │    ONNX Intent Classifier           │  ←── ~50ms
-        │  • MiniLM-L6-v2 (86MB local)        │  
-        │  • Embedding-based classification   │  
-        │  • Confidence + Risk scoring        │  
-        └─────┬─────────────┬─────────────────┘
-              ↓             ↓
-        [confident]    [uncertain/risky]
-              ↓             ↓
-      ┌──────────────┐ ┌────────────────────────┐
-      │ Deterministic│ │    LLM Escalation      │  ←── 200-800ms
-      │ Tool Executor│ │ • GPT-4o-mini/Groq     │  
-      │ • GetOrder   │ │ • Plan generation      │  
-      │ • Validation │ │ • Tool orchestration   │  
-      │ • Fast paths │ │ • Response composition │  
-      └──────┬───────┘ └─────────┬──────────────┘
-             ↓                   ↓
-             └─────┬─────────────┘
-                   ↓
-         ┌─────────────────┐
-         │ Response to User│
-         └─────────────────┘
-```
+1. USER REQUEST
+   ↓
 
-</div>
+2. RULE GATE (~5ms)
+   • Pattern matching (hi/hello)
+   • Input validation (length) 
+   • Fast path responses
+   ↓ [if no direct match, continue]
+
+3. ONNX INTENT CLASSIFIER (~50ms)
+   • MiniLM-L6-v2 (86MB local model)
+   • Embedding-based classification
+   • Confidence + Risk scoring
+   ↓
+   
+   HIGH CONFIDENCE              LOW CONFIDENCE/RISKY
+   ↓                            ↓
+   
+   DETERMINISTIC EXECUTOR       LLM ESCALATION (~200-800ms)
+   (~10ms)                      • GPT-4o-mini/Groq
+   • GetOrder lookup            • Plan generation  
+   • Data validation            • Tool orchestration
+   • Fast business logic        • Response composition
+   ↓                            ↓
+                 ↓
+                 
+4. RESPONSE TO USER
+```
 
 ### Components
 
