@@ -415,8 +415,6 @@ test-session.*
 
 # ONNX models are included in repo (essential for functionality)
 # models/ directory and contents will be tracked
-
-# Project-specific ignores
 # Runtime logs
 *.log
 test_*.txt
@@ -429,11 +427,3 @@ test_*.txt
 *.log
 test_*.txt
 
-# ONNX models (large files - track via LFS or download separately)
-models/*.onnx
-models/*.bin
-models/tokenizer.json
-models/vocab.txt
-
-# Keep models directory structure but ignore model files
-!models/.gitkeep
