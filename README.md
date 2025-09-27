@@ -42,37 +42,58 @@ docker run ghcr.io/katasec/intentive:latest
 2. Sign up and create an API key
 3. Use with the Docker command above
 
-## Implementation Architecture
+## Current Architecture
 
-The system implements a multi-stage pipeline with escalation points:
+Simple 3-stage pipeline optimized for speed and cost-efficiency:
 
 ```
-User Request
-    ↓
-Rule Gate (heuristic filtering)
-    ↓
-ONNX Intent Classifier (MiniLM-L6-v2)
-    ├─→ [high confidence] → Plan Generation → Tool Execution
-    └─→ [low confidence/high risk] → LLM Escalation
-        ├─→ Structured plan generation
-        ├─→ Quality evaluation
-        └─→ Response refinement if needed
+┌─────────────────┐
+│   User Request  │
+└─────────┬───────┘
+          ↓
+   ┌─────────────────────────────────────┐
+   │         Rule Gate                   │  ←── <5ms
+   │  • Pattern matching (hi/hello)     │  
+   │  • Input validation (length)       │  
+   │  • Fast path responses             │  
+   └─────────┬───────────────────────────┘
+             ↓ [continue]
+   ┌─────────────────────────────────────┐
+   │    ONNX Intent Classifier          │  ←── ~50ms
+   │  • MiniLM-L6-v2 (86MB local)      │  
+   │  • Embedding-based classification  │  
+   │  • Confidence + Risk scoring       │  
+   └─────┬─────────────┬─────────────────┘
+         ↓             ↓
+   [confident]    [uncertain/risky]
+         ↓             ↓
+ ┌──────────────┐ ┌────────────────────────┐
+ │ Deterministic│ │    LLM Escalation      │  ←── 200-800ms
+ │ Tool Executor│ │ • GPT-4o-mini/Groq     │  
+ │ • GetOrder   │ │ • Plan generation      │  
+ │ • Validation │ │ • Tool orchestration   │  
+ │ • Fast paths │ │ • Response composition │  
+ └──────┬───────┘ └─────────┬──────────────┘
+        ↓                   ↓
+        └─────┬─────────────┘
+              ↓
+    ┌─────────────────┐
+    │ Response to User│
+    └─────────────────┘
 ```
 
 ### Components
 
-**Rule Gate**: Pattern matching for common cases (greetings, simple queries)
-**ONNX Classifier**: 86MB MiniLM model doing embedding-based intent classification
-**Plan Validator**: Schema validation and business rule checking
-**Quality Indicators**: Multi-layer evaluation of response adequacy
-**Tool Execution**: Deterministic business logic (order lookups, etc.)
+**Rule Gate** (0-5ms): Pattern matching for common cases like greetings, input validation
+**ONNX Classifier** (~50ms): 86MB MiniLM model for local intent classification with confidence scoring  
+**Tool Executor** (~10ms): Deterministic business logic - order lookups, data queries, calculations
+**LLM Escalation** (200-800ms): GPT-4o-mini or Groq models for complex reasoning and plan generation
 
-### Observed Execution Paths
+### Execution Paths
 
-- `RuleGate → FastPath` - Pattern-matched responses
-- `RuleGate → OnnxClassifier → ToolExecution` - High-confidence classification
-- `RuleGate → OnnxClassifier → LLMEscalation → QualityEvaluation` - Complex requests
-- `RuleGate → OnnxClassifier → LLMEscalation → ResponseRefinement` - Quality-driven retry
+1. **Fast Path**: `Rule Gate → Response` (greetings, simple queries)
+2. **Deterministic Path**: `Rule Gate → ONNX → Tool Executor` (high-confidence classifications) 
+3. **LLM Path**: `Rule Gate → ONNX → LLM Escalation → Tools` (low-confidence or high-risk requests)
 
 ## Development Setup
 
