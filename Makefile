@@ -1,5 +1,5 @@
-# Intentive - Fit-for-Purpose AI Orchestration
-# Self-documenting Makefile for build, test, and LLM connectivity validation
+# Intentive - Tool-First AI Orchestration  
+# Self-documenting Makefile for build, test, and training workflow
 
 # Colors for output
 CYAN := \033[36m
@@ -16,7 +16,7 @@ DOTNET := /usr/local/share/dotnet/dotnet
 
 .PHONY: help
 help: ## Show available make targets with descriptions
-	@echo "$(CYAN)🚀 Intentive - Fit-for-Purpose AI Orchestration$(RESET)"
+	@echo "$(CYAN)🚀 Intentive - Tool-First AI Orchestration$(RESET)"
 	@echo ""
 	@echo "$(GREEN)Available targets:$(RESET)"
 	@awk 'BEGIN {FS = ":.*##"; printf ""} /^[a-zA-Z_-]+:.*?##/ { printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2 } /^##@/ { printf "\n$(YELLOW)%s$(RESET)\n", substr($$0, 5) }' $(MAKEFILE_LIST)
@@ -69,8 +69,8 @@ test-llm: check-llm-env build ## Run only LLM integration tests with full output
 .PHONY: run
 run: build ## Run console app with clean output (logs to intentive.log)
 	@rm -f intentive.log
-	@echo "$(CYAN)🚀 Starting Intentive (logs in intentive.log)...$(RESET)"
-	$(DOTNET) run --project src/Intentive.Console -- --mode intentive
+	@echo "$(CYAN)🚀 Starting Intentive - Tool-First AI Orchestration...$(RESET)"
+	$(DOTNET) run --project src/Intentive.Console
 
 .PHONY: run-quiet
 run-quiet: build ## Run console app with minimal logging (clean output)
@@ -85,10 +85,15 @@ run-verbose: build ## Run console app with verbose logs in console + file
 	@echo "$(CYAN)🚀 Starting Intentive (verbose console logs)...$(RESET)"
 	$(DOTNET) run --project src/Intentive.Console -- --mode intentive --console-logs
 
-.PHONY: run-llm-first
-run-llm-first: build ## Run the console application in LLM-First mode
-	@echo "$(CYAN)🚀 Starting Intentive console application (LLM-First mode)...$(RESET)"
-	$(DOTNET) run --project src/Intentive.Console -- --mode llmfirst
+.PHONY: train-tools
+train-tools: build ## Train ONNX model from discovered tools (MCP + local)
+	@echo "$(CYAN)🎯 Training tool classification model...$(RESET)"
+	$(DOTNET) run --project src/Intentive.Console -- --train-tools
+
+.PHONY: train-tools-custom
+train-tools-custom: build ## Train with custom parameters (examples=300, model=custom.onnx)
+	@echo "$(CYAN)🎯 Training with custom parameters...$(RESET)"
+	$(DOTNET) run --project src/Intentive.Console -- --train-tools --examples 300 --model models/custom-intentive.onnx
 
 ##@ Environment Validation
 .PHONY: check-env
@@ -158,8 +163,8 @@ watch: ## Run tests in watch mode for development
 .PHONY: info
 info: check-env check-llm-env ## Show complete project and environment information
 	@echo "$(CYAN)📋 Project Information:$(RESET)"
-	@echo "$(YELLOW)• Project:$(RESET) Intentive - Fit-for-Purpose AI Orchestration"
-	@echo "$(YELLOW)• Architecture:$(RESET) MiniLM ONNX → Deterministic → Optional LLM escalation"
+	@echo "$(YELLOW)• Project:$(RESET) Intentive - Tool-First AI Orchestration"
+	@echo "$(YELLOW)• Architecture:$(RESET) Rule Gate → ONNX Tool Classification → Direct Execution OR LLM Escalation"
 	@echo "$(YELLOW)• Solution:$(RESET) $$(find . -name "*.sln" | head -1)"
 	@echo "$(YELLOW)• Test Projects:$(RESET) $$(find . -name "*Tests.csproj" | wc -l | tr -d ' ')"
 	@echo ""

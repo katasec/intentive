@@ -3,8 +3,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using OpenTelemetry;
 using Intentive.Core.Configuration;
+using Intentive.Core.Models;
 using Intentive.Core.Plugins;
 using Intentive.Core.Tools;
+using Intentive.Core.Services;
 using System.Collections.Concurrent;
 
 namespace Intentive.Console;
@@ -13,11 +15,18 @@ class Program
 {
     static async Task Main(string[] args)
     {
+        // Check for training command first
+        if (args.Contains("--train-tools"))
+        {
+            await HandleTrainingCommandAsync(args);
+            return;
+        }
+        
         // Build configuration from command line and environment
         var config = ConfigurationExtensions.BuildOrchestrationConfig(args);
         
-        System.Console.WriteLine("🚀 Intentive - Fit-for-Purpose AI Orchestration");
-        System.Console.WriteLine($"Mode: {config.Mode}");
+        System.Console.WriteLine("🚀 Intentive - Tool-First AI Orchestration");
+        System.Console.WriteLine("Architecture: Rule Gate → Tool Classification → Direct Execution OR LLM Escalation");
         System.Console.WriteLine($"Model: {config.OpenAI.CheapModel}");
         System.Console.WriteLine();
         
@@ -109,16 +118,8 @@ class Program
                 apiKey: config.OpenAI.ApiKey);
         }
         
-        // Add plugins based on orchestration mode
-        switch (config.Mode)
-        {
-            case OrchestrationMode.Intentive:
-                kernelBuilder.Plugins.AddFromType<IntentiveOrchestrationPlugin>();
-                break;
-            case OrchestrationMode.LLMFirst:
-                kernelBuilder.Plugins.AddFromType<LLMFirstOrchestrationPlugin>();
-                break;
-        }
+        // Add the new simple orchestration plugin
+        kernelBuilder.Plugins.AddFromType<SimpleOrchestrationPlugin>();
         
         // Add tools
         kernelBuilder.Plugins.AddFromType<GetOrderTool>();
@@ -127,6 +128,10 @@ class Program
         
         System.Console.WriteLine("✅ Kernel initialized successfully!");
         System.Console.WriteLine();
+        
+        // Initialize and display available capabilities
+        await DisplayCapabilitiesAsync(kernel);
+        
         PrintInstructions();
         
         // Main interaction loop
@@ -150,11 +155,7 @@ class Program
                 continue;
             }
             
-            if (input.ToLower().StartsWith("mode "))
-            {
-                await SwitchModeAsync(input, kernel, config);
-                continue;
-            }
+            // Remove mode switching - we only use simple orchestration now
             
             try
             {
@@ -162,15 +163,10 @@ class Program
                 System.Console.WriteLine($"🤔 Processing: {input}");
                 System.Console.WriteLine();
                 
-                // Select orchestration function based on mode and invoke
+                // Use the new simple orchestration
                 KernelArguments kernelArgs = new() { ["input"] = input, ["kernel"] = kernel };
                 
-                FunctionResult result = config.Mode switch
-                {
-                    OrchestrationMode.Intentive => await kernel.InvokeAsync("IntentiveOrchestrationPlugin", "orchestrate_intentive", kernelArgs),
-                    OrchestrationMode.LLMFirst => await kernel.InvokeAsync("LLMFirstOrchestrationPlugin", "orchestrate_llm_first", kernelArgs),
-                    _ => await kernel.InvokeAsync("IntentiveOrchestrationPlugin", "orchestrate_intentive", kernelArgs)
-                };
+                FunctionResult result = await kernel.InvokeAsync("SimpleOrchestrationPlugin", "orchestrate_simple", kernelArgs);
                 
                 System.Console.WriteLine("📋 Result:");
                 System.Console.WriteLine(result.ToString());
@@ -187,52 +183,184 @@ class Program
     private static void PrintUsage()
     {
         System.Console.WriteLine("Usage:");
-        System.Console.WriteLine("  --mode <intentive|llmfirst>     Set orchestration mode");
         System.Console.WriteLine("  --openai-key <key>              Set OpenAI API key");
-        System.Console.WriteLine("  --cheap-model <model>           Set model for cheap LM probe");
+        System.Console.WriteLine("  --cheap-model <model>           Set model for LLM escalation");
         System.Console.WriteLine("  --enable-logging <true|false>  Enable detailed logging");
+        System.Console.WriteLine("  --train-tools                   Train ONNX model from discovered tools");
+        System.Console.WriteLine("  --examples <count>              Number of training examples per tool (default: 200)");
+        System.Console.WriteLine("  --model <path>                  Output model path (default: models/trained-intentive.onnx)");
         System.Console.WriteLine();
         System.Console.WriteLine("Environment Variables:");
-        System.Console.WriteLine("  ORCHESTRATION_MODE=<intentive|llmfirst>");
         System.Console.WriteLine("  OPENAI_API_KEY=<your-api-key>");
+        System.Console.WriteLine("  OPENAI_BASE_URL=<custom-endpoint>  # Optional: for Groq, Azure, etc.");
         System.Console.WriteLine();
     }
     
     private static void PrintInstructions()
     {
-        System.Console.WriteLine("💡 Try these examples:");
-        System.Console.WriteLine("   - What is the status of order 12345?");
-        System.Console.WriteLine("   - Track order 67890");
-        System.Console.WriteLine("   - Hello (fast path response)");
+        System.Console.WriteLine("✨ How Intentive Works:");
+        System.Console.WriteLine("   1. 🚨 Fast rule gate for common requests (hello, hi, etc.)");
+        System.Console.WriteLine("   2. 🎯 ONNX tool classification maps your request to specific tools");
+        System.Console.WriteLine("   3. 🔧 Direct tool execution for high-confidence matches");
+        System.Console.WriteLine("   4. 🤖 LLM escalation for complex or ambiguous requests");
+        System.Console.WriteLine();
+        System.Console.WriteLine("💡 Try asking about your available capabilities:");
+        System.Console.WriteLine("   - Order status 12345");
+        System.Console.WriteLine("   - Hello (fast response)");
+        System.Console.WriteLine("   - Any natural language query matching your tools");
         System.Console.WriteLine();
         System.Console.WriteLine("Commands:");
-        System.Console.WriteLine("   help, h          - Show this help");
-        System.Console.WriteLine("   mode <mode>      - Switch orchestration mode");
+        System.Console.WriteLine("   help, h          - Show this help and capabilities");
         System.Console.WriteLine("   exit, quit, q    - Exit application");
         System.Console.WriteLine();
     }
     
-    private static async Task SwitchModeAsync(string input, Kernel kernel, OrchestrationConfig config)
+    
+    /// <summary>
+    /// Initialize tool system and display available capabilities
+    /// </summary>
+    private static async Task DisplayCapabilitiesAsync(Kernel kernel)
     {
-        var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length != 2)
+        try
         {
-            System.Console.WriteLine("Usage: mode <intentive|llmfirst>");
-            return;
+            System.Console.WriteLine("🔧 Initializing tool system...");
+            
+            // Create a minimal logger for tool discovery
+            var loggerFactory = LoggerFactory.Create(builder => 
+                builder.AddProvider(new SimpleFileLoggerProvider("intentive.log")));
+            var logger = loggerFactory.CreateLogger("Startup");
+            
+            // Initialize tool registry to discover available tools
+            var toolRegistry = new ToolRegistry(logger);
+            await toolRegistry.InitializeAsync();
+            
+            var capabilities = toolRegistry.GetAvailableCapabilities();
+            var allTools = toolRegistry.GetAllTools();
+            
+            if (capabilities.Count > 0)
+            {
+                System.Console.WriteLine($"✅ Tool system initialized - {allTools.Count} tools, {capabilities.Count} capabilities");
+                System.Console.WriteLine();
+                System.Console.WriteLine("🤖 Here's what I can do:");
+                
+                // Group capabilities by tool for better display
+                foreach (var (toolName, toolDescriptor) in allTools)
+                {
+                    var toolType = toolDescriptor.Type == ToolType.MCP ? "🌐" : "🔧";
+                    System.Console.WriteLine($"   {toolType} {toolName}: {string.Join(", ", toolDescriptor.Capabilities)}");
+                }
+                
+                System.Console.WriteLine();
+                System.Console.WriteLine($"💡 Total capabilities: {string.Join(", ", capabilities)}");
+            }
+            else
+            {
+                System.Console.WriteLine("⚠️ No tools found.");
+                System.Console.WriteLine();
+                System.Console.WriteLine("🔧 Quick Setup:");
+                System.Console.WriteLine("   1. Check tools.json exists and has MCP server configurations");
+                System.Console.WriteLine("   2. Run: ./intentive --train-tools");
+                System.Console.WriteLine("   3. System will auto-discover and train from configured tools");
+            }
+            
+            System.Console.WriteLine();
+            loggerFactory.Dispose();
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"⚠️ Tool discovery failed: {ex.Message}");
+            System.Console.WriteLine();
+            System.Console.WriteLine("🔧 Setup Instructions:");
+            System.Console.WriteLine("   1. Configure tools in tools.json");
+            System.Console.WriteLine("   2. Run: ./intentive --train-tools");
+            System.Console.WriteLine("   3. Start: ./intentive");
+            System.Console.WriteLine();
+        }
+    }
+    
+    /// <summary>
+    /// Handle the --train-tools command
+    /// </summary>
+    private static async Task HandleTrainingCommandAsync(string[] args)
+    {
+        System.Console.WriteLine("🔧 Intentive Tool Training Mode");
+        System.Console.WriteLine("===============================\n");
+        
+        // Parse training options
+        var exampleCount = GetOptionValue(args, "--examples", "200");
+        var modelPath = GetOptionValue(args, "--model", "models/trained-intentive.onnx");
+        
+        if (!int.TryParse(exampleCount, out var examples))
+        {
+            examples = 200;
         }
         
-        if (Enum.TryParse<OrchestrationMode>(parts[1], true, out var newMode))
-        {
-            config.Mode = newMode;
-            System.Console.WriteLine($"🔄 Switched to {newMode} mode");
-            System.Console.WriteLine("Note: Restart required for full plugin reloading");
-        }
-        else
-        {
-            System.Console.WriteLine($"❌ Invalid mode: {parts[1]}. Use 'intentive' or 'llmfirst'");
-        }
-        
+        System.Console.WriteLine($"📊 Training Parameters:");
+        System.Console.WriteLine($"   Examples per tool: {examples}");
+        System.Console.WriteLine($"   Output model: {modelPath}");
         System.Console.WriteLine();
+        
+        // Create logger for training
+        var loggerFactory = LoggerFactory.Create(builder => 
+            builder.AddConsole().SetMinimumLevel(LogLevel.Information));
+        var logger = loggerFactory.CreateLogger("TrainingMode");
+        
+        try
+        {
+            // Initialize tool registry
+            System.Console.WriteLine("🔧 Initializing Tool Registry...");
+            var toolRegistry = new ToolRegistry(logger);
+            await toolRegistry.InitializeAsync();
+            
+            var availableCapabilities = toolRegistry.GetAvailableCapabilities();
+            System.Console.WriteLine($"✅ Tool Registry initialized - {availableCapabilities.Count} capabilities");
+            
+            if (availableCapabilities.Count == 0)
+            {
+                System.Console.WriteLine("❌ No tools found. Please check your tools.json configuration.");
+                return;
+            }
+            
+            System.Console.WriteLine($"📋 Available capabilities: {string.Join(", ", availableCapabilities)}");
+            System.Console.WriteLine();
+            
+            // Run training pipeline
+            var intentGenerator = new IntentGenerator(logger, toolRegistry);
+            var trainedModelPath = await intentGenerator.DiscoverAndTrainAsync(examples, modelPath);
+            
+            System.Console.WriteLine();
+            System.Console.WriteLine("✅ Training completed successfully!");
+            System.Console.WriteLine($"📁 Model saved to: {trainedModelPath}");
+            System.Console.WriteLine();
+            System.Console.WriteLine("🚀 Tool-first orchestration is ready!");
+            System.Console.WriteLine("   Architecture: Rule Gate → ONNX Classification → Direct Execution OR LLM Escalation");
+            System.Console.WriteLine();
+            System.Console.WriteLine("Start the system:");
+            System.Console.WriteLine("   ./intentive");
+            System.Console.WriteLine();
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"❌ Training failed: {ex.Message}");
+            logger.LogError(ex, "Training pipeline failed");
+        }
+        finally
+        {
+            loggerFactory.Dispose();
+        }
+    }
+    
+    /// <summary>
+    /// Get command line option value
+    /// </summary>
+    private static string GetOptionValue(string[] args, string optionName, string defaultValue)
+    {
+        var optionIndex = Array.IndexOf(args, optionName);
+        if (optionIndex >= 0 && optionIndex < args.Length - 1)
+        {
+            return args[optionIndex + 1];
+        }
+        return defaultValue;
     }
 }
 

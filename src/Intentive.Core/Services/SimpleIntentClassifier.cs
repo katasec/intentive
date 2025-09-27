@@ -1,173 +1,231 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.ML.OnnxRuntime;
-using Microsoft.ML.OnnxRuntime.Tensors;
+using Microsoft.ML;
+using Microsoft.ML.Data;
 using Intentive.Core.Configuration;
 using Intentive.Core.Models;
 
 namespace Intentive.Core.Services;
 
 /// <summary>
-/// Simple BERT-style intent classifier using ONNX
-/// Uses basic tokenization and pre-defined intent patterns
+/// Tool-focused intent classifier using trained ML.NET models
+/// Maps user input directly to available tools with confidence scoring
 /// </summary>
 public class SimpleIntentClassifier : IDisposable
 {
     private readonly ILogger _logger;
     private readonly IntentConfig _config;
-    private readonly InferenceSession? _session;
-    private readonly Dictionary<string, string[]> _intentPatterns;
+    private MLContext? _mlContext;
+    private ITransformer? _trainedModel;
+    private PredictionEngine<ModelInput, ModelOutput>? _predictionEngine;
+    private readonly ToolRegistry _toolRegistry;
     private bool _disposed = false;
 
-    public SimpleIntentClassifier(ILogger logger, IntentConfig config)
+    public SimpleIntentClassifier(ILogger logger, IntentConfig config, ToolRegistry toolRegistry)
     {
         _logger = logger;
         _config = config;
+        _toolRegistry = toolRegistry;
+        _mlContext = new MLContext(seed: 0);
 
-        // Try to load ONNX model if it exists, otherwise use pattern matching
-        if (File.Exists(_config.ModelPath))
-        {
-            try
-            {
-                _session = new InferenceSession(_config.ModelPath);
-                _logger.LogInformation("ONNX model loaded: {ModelPath}", _config.ModelPath);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to load ONNX model, using pattern matching fallback");
-                _session = null;
-            }
-        }
-        else
-        {
-            _logger.LogInformation("ONNX model not found, using pattern matching");
-            _session = null;
-        }
-
-        _intentPatterns = new Dictionary<string, string[]>
-        {
-            ["OrderStatus"] = new[] { "order", "status", "track", "package", "shipment", "delivery" },
-            ["GeneralHelp"] = new[] { "help", "support", "assist", "question", "issue" },
-            ["ProductInquiry"] = new[] { "product", "item", "details", "specs", "information" },
-            ["Greeting"] = new[] { "hi", "hello", "hey", "greetings", "good morning" }
-        };
+        LoadTrainedModelAsync().GetAwaiter().GetResult();
     }
 
-    public async Task<ClassificationResult> ClassifyAsync(string input, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Classify user input to find the best matching tool
+    /// </summary>
+    public async Task<ToolClassificationResult> FindToolForAsync(string input, CancellationToken cancellationToken = default)
     {
-        if (_session != null)
+        if (_predictionEngine != null && _trainedModel != null)
         {
-            return await ClassifyWithOnnxAsync(input, cancellationToken);
+            return ClassifyWithTrainedModel(input);
         }
         else
         {
-            return ClassifyWithPatterns(input);
+            return ClassifyWithFallbackPatterns(input);
         }
     }
 
-    private async Task<ClassificationResult> ClassifyWithOnnxAsync(string input, CancellationToken cancellationToken)
+    /// <summary>
+    /// Load the trained ML.NET model
+    /// </summary>
+    private async Task LoadTrainedModelAsync()
     {
         try
         {
-            // Simple tokenization (in production, use proper BERT tokenizer)
-            var tokens = SimpleTokenize(input);
-            var inputIds = tokens.Select(t => (long)Math.Abs(t.GetHashCode()) % 30000).ToArray();
-            
-            // Pad/truncate to 512 tokens
-            const int maxLength = 512;
-            if (inputIds.Length > maxLength)
+            // Try different model paths
+            var possiblePaths = new[]
             {
-                inputIds = inputIds.Take(maxLength).ToArray();
-            }
-            else if (inputIds.Length < maxLength)
-            {
-                var padding = Enumerable.Repeat(0L, maxLength - inputIds.Length).ToArray();
-                inputIds = inputIds.Concat(padding).ToArray();
-            }
-
-            var attentionMask = inputIds.Select(id => id > 0 ? 1L : 0L).ToArray();
-
-            // Create tensors
-            var inputIdsTensor = new DenseTensor<long>(inputIds, new[] { 1, inputIds.Length });
-            var attentionMaskTensor = new DenseTensor<long>(attentionMask, new[] { 1, attentionMask.Length });
-
-            var inputs = new List<NamedOnnxValue>
-            {
-                NamedOnnxValue.CreateFromTensor("input_ids", inputIdsTensor),
-                NamedOnnxValue.CreateFromTensor("attention_mask", attentionMaskTensor)
+                "models/trained-intentive.zip",  // From training command
+                _config.ModelPath.Replace(".onnx", ".zip"),  // Config path
+                "models/trained-intentive.onnx",  // Fallback
+                _config.ModelPath  // Original config
             };
 
-            using var results = _session!.Run(inputs);
-            var output = results.FirstOrDefault()?.AsTensor<float>();
-
-            if (output != null)
+            string? modelPath = null;
+            foreach (var path in possiblePaths)
             {
-                // Use ONNX output to influence pattern matching
-                var onnxScore = output.Sum() / output.Length; // Simple aggregation
-                return ClassifyWithPatterns(input, onnxScore);
+                if (File.Exists(path))
+                {
+                    modelPath = path;
+                    break;
+                }
+            }
+
+            if (modelPath != null && modelPath.EndsWith(".zip"))
+            {
+                _logger.LogInformation("Loading trained ML.NET model: {ModelPath}", modelPath);
+                _trainedModel = _mlContext.Model.Load(modelPath, out var schema);
+                _predictionEngine = _mlContext.Model.CreatePredictionEngine<ModelInput, ModelOutput>(_trainedModel);
+                _logger.LogInformation("✅ Trained model loaded successfully");
+            }
+            else
+            {
+                _logger.LogWarning("⚠️ No trained model found, using fallback pattern matching");
+                _logger.LogInformation("💡 Run './intentive --train-tools' to create a trained model");
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "ONNX classification failed, falling back to patterns");
+            _logger.LogWarning(ex, "Failed to load trained model, using pattern matching fallback");
         }
-
-        return ClassifyWithPatterns(input);
     }
 
-    private ClassificationResult ClassifyWithPatterns(string input, float onnxBoost = 0.0f)
+    /// <summary>
+    /// Use trained ML.NET model for classification
+    /// </summary>
+    private ToolClassificationResult ClassifyWithTrainedModel(string input)
+    {
+        try
+        {
+            var modelInput = new ModelInput { Text = input };
+            var prediction = _predictionEngine!.Predict(modelInput);
+            
+            _logger.LogDebug("🤖 Model prediction: {Tool} (confidence: {Score})", 
+                prediction.PredictedLabel, prediction.Score?.Max() ?? 0);
+            
+            // Get confidence from score array
+            var confidence = prediction.Score?.Max() ?? 0.0;
+            
+            return new ToolClassificationResult
+            {
+                ToolName = prediction.PredictedLabel,
+                Confidence = confidence,
+                BestCapability = prediction.PredictedLabel,
+                AllScores = new Dictionary<string, double> { [prediction.PredictedLabel] = confidence }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Model prediction failed, falling back to patterns");
+            return ClassifyWithFallbackPatterns(input);
+        }
+    }
+
+    /// <summary>
+    /// Fallback pattern matching when no trained model is available
+    /// </summary>
+    private ToolClassificationResult ClassifyWithFallbackPatterns(string input)
     {
         var lowerInput = input.ToLower();
-        var scores = new Dictionary<string, double>();
-
-        foreach (var intent in _intentPatterns)
+        var toolScores = new Dictionary<string, double>();
+        
+        // Get all available tools from registry
+        var availableTools = _toolRegistry.GetAllTools();
+        
+        foreach (var (toolName, toolDescriptor) in availableTools)
         {
-            var matchCount = intent.Value.Count(pattern => lowerInput.Contains(pattern));
-            var score = (double)matchCount / intent.Value.Length + onnxBoost * 0.1;
-            scores[intent.Key] = score;
+            double score = 0.0;
+            
+            // Score based on capability keywords
+            foreach (var capability in toolDescriptor.Capabilities)
+            {
+                if (lowerInput.Contains(capability.ToLower()))
+                {
+                    score += 1.0;
+                }
+                
+                // Additional scoring for common patterns
+                score += capability.ToLower() switch
+                {
+                    var c when c.Contains("weather") && (lowerInput.Contains("weather") || lowerInput.Contains("temperature") || lowerInput.Contains("forecast")) => 2.0,
+                    var c when c.Contains("time") && (lowerInput.Contains("time") || lowerInput.Contains("date") || lowerInput.Contains("today")) => 2.0,
+                    var c when c.Contains("calculate") && (lowerInput.Contains("calculate") || lowerInput.Contains("math") || ContainsMathExpression(lowerInput)) => 2.0,
+                    var c when c.Contains("order") && (lowerInput.Contains("order") || lowerInput.Contains("track") || lowerInput.Contains("status")) => 2.0,
+                    _ => 0.0
+                };
+            }
+            
+            // Normalize score by number of capabilities
+            if (toolDescriptor.Capabilities.Count > 0)
+            {
+                score = score / toolDescriptor.Capabilities.Count;
+            }
+            
+            toolScores[toolName] = score;
         }
-
-        var bestMatch = scores.OrderByDescending(x => x.Value).FirstOrDefault();
+        
+        var bestMatch = toolScores.OrderByDescending(x => x.Value).FirstOrDefault();
         var confidence = bestMatch.Value;
         
-        // Calculate ambiguity and risk
-        var sortedScores = scores.OrderByDescending(x => x.Value).ToList();
-        var secondBest = sortedScores.Count > 1 ? sortedScores[1].Value : 0.0;
-        var ambiguityScore = confidence > 0 ? Math.Max(0.0, 1.0 - (confidence - secondBest)) : 0.8;
-        var riskScore = 1.0 - confidence;
-
-        var taskType = confidence >= 0.3 ? bestMatch.Key : "Unknown";
+        // Only return tool if confidence is reasonable
+        if (confidence < 0.3)
+        {
+            return new ToolClassificationResult
+            {
+                ToolName = null,
+                Confidence = 0.0,
+                BestCapability = null,
+                AllScores = toolScores
+            };
+        }
         
-        return new ClassificationResult(
-            TaskType: taskType,
-            AmbiguityScore: Math.Max(0.0, Math.Min(1.0, ambiguityScore)),
-            RiskScore: Math.Max(0.0, Math.Min(1.0, riskScore)),
-            Domain: GetDomain(taskType),
-            IntentScores: scores
-        );
+        return new ToolClassificationResult
+        {
+            ToolName = bestMatch.Key,
+            Confidence = confidence,
+            BestCapability = availableTools[bestMatch.Key].Capabilities.FirstOrDefault(),
+            AllScores = toolScores
+        };
     }
-
-    private static string[] SimpleTokenize(string input)
+    
+    /// <summary>
+    /// Check if input contains mathematical expressions
+    /// </summary>
+    private bool ContainsMathExpression(string input)
     {
-        return input.ToLower()
-            .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', '!', '?' }, StringSplitOptions.RemoveEmptyEntries)
-            .Where(token => token.Length > 0)
-            .ToArray();
+        return input.Any(c => "+-*/%".Contains(c)) || 
+               input.Contains("plus") || input.Contains("minus") || 
+               input.Contains("times") || input.Contains("divided") ||
+               System.Text.RegularExpressions.Regex.IsMatch(input, @"\d+\s*[+\-*/]\s*\d+");
     }
-
-    private static string GetDomain(string taskType) => taskType switch
-    {
-        "OrderStatus" or "ProductInquiry" => "Ecommerce",
-        "GeneralHelp" => "Support",
-        "Greeting" => "General",
-        _ => "Unknown"
-    };
 
     public void Dispose()
     {
         if (!_disposed)
         {
-            _session?.Dispose();
+            _predictionEngine?.Dispose();
+            // ML.NET objects don't have Dispose methods
+            _trainedModel = null;
+            _mlContext = null;
             _disposed = true;
         }
     }
+}
+
+/// <summary>
+/// ML.NET input model for predictions
+/// </summary>
+public class ModelInput
+{
+    public string Text { get; set; } = "";
+    public string Label { get; set; } = "";
+}
+
+/// <summary>
+/// ML.NET output model for predictions
+/// </summary>
+public class ModelOutput
+{
+    public string PredictedLabel { get; set; } = "";
+    public float[] Score { get; set; } = Array.Empty<float>();
 }

@@ -1,23 +1,25 @@
-# Intentive - Fit-for-Purpose AI Orchestration
+# Intentive - Tool-First AI Orchestration
 
-Most agentic AI solutions use LLMs for workflow orchestration - essentially deploying something that knows the history of humanity to execute business logic. This is like using a cannonball to kill a mosquito.
+A **tool-first architecture** that uses AI as a **translator** rather than an orchestrator. Instead of using LLMs to drive workflow logic, Intentive uses lightweight ONNX models to map human intent to specific tools, with LLM escalation only for unsupported requests.
 
 | Source | Key Point | Quote (Workflow-Orchestration Emphasis) |
 |--------|-----------|------------------------------------------|
 | [Retool - State of AI (H1 2024)](https://retool.com/blog/state-of-ai-h1-2024) | Workflow automation jumped YoY from 13% → 18% | "We saw a big jump in AI used for workflow automation... the fastest-growing category of adoption this year." |
-| [LangChain - Is LangGraph Used in Production?](https://blog.langchain.com/is-langgraph-used-in-production/) | Enterprises use LangGraph for reliable/observable workflows | "The key driver for LangGraph adoption is making agents reliable, observable, and controllable in production workflows." |
+| [LangChain - Is LangGraph Used in Production?](https://blog.langchain.com/is-langgraph-used-in-production/) | Enterprises use LangGraph for reliable/observable workflows | "The key driver for LangGraph adoption is making agents reliable, observable, and controlabile in production workflows." |
 
-Workflow automation worked efficiently for decades before LLMs existed. The key insight is that AI's primary value should be as a **translator** - converting human intent into deterministic code paths, not replacing the execution engine itself.
+## 🎯 Core Philosophy
 
-## Implementation Approach
+**AI as Translator, Not Orchestrator**: Convert human intent into deterministic tool execution paths instead of using LLMs for business logic.
 
-This implementation separates intent translation from workflow execution:
+## ⚡ Tool-First Architecture
 
-1. **Intent Translation**: Lightweight ONNX models classify user requests into actionable intents
-2. **Workflow Execution**: Traditional deterministic code handles business logic
-3. **LLM Escalation**: Only when human intent cannot be reliably mapped to existing workflows
+**Self-Configuring System**: Automatically discovers tools from `tools.json` configuration, trains ONNX models on discovered capabilities, and provides fast deterministic execution.
 
-The hypothesis is that this separation yields better latency, cost, and reliability characteristics than LLM-driven orchestration while maintaining the human-friendly interface that makes AI valuable.
+1. **Tool Discovery**: Automatically connects to MCP servers and local tools
+2. **Intent Training**: Generates training data from discovered tool capabilities  
+3. **ONNX Classification**: Lightweight models (86MB) classify requests to specific tools
+4. **Direct Execution**: Fast tool execution (~10-50ms) without LLM overhead
+5. **LLM Escalation**: Only for unsupported or complex requests
 
 ## 🚀 Quick Start with Docker
 
@@ -94,6 +96,70 @@ Simple 3-stage pipeline optimized for speed and cost-efficiency:
 2. **Deterministic Path**: `Rule Gate → ONNX → Tool Executor` (high-confidence classifications) 
 3. **LLM Path**: `Rule Gate → ONNX → LLM Escalation → Tools` (low-confidence or high-risk requests)
 
+## 🔧 Tool Configuration & Training
+
+### 1. Configure Your Tools
+
+Edit `tools.json` to define MCP servers and local tools:
+
+```json
+{
+  "mcpServers": [
+    {
+      "name": "weather-server",
+      "enabled": true,
+      "transport": {
+        "type": "stdio",
+        "command": "docker",
+        "args": ["run", "--rm", "-i", "mcp/weather-server"]
+      },
+      "capabilities": ["weather", "forecast", "temperature"]
+    }
+  ],
+  "localTools": [
+    {
+      "name": "GetOrder",
+      "enabled": true,
+      "class": "Intentive.Core.Tools.GetOrderTool",
+      "capabilities": ["order", "status", "track"]
+    }
+  ]
+}
+```
+
+### 2. Train Intent Classifier
+
+**Auto-discover and train** from your configured tools:
+
+```bash
+# Train ONNX model from discovered tools
+./intentive --train-tools
+
+# With custom parameters
+./intentive --train-tools --examples 200 --model models/custom.onnx
+```
+
+**Training Process**:
+1. 🔍 Discovers tools from `tools.json` (local + MCP servers)
+2. 🎨 Generates training examples for each discovered capability
+3. 🧠 Trains lightweight ONNX model (2-5 minutes)
+4. ✅ System ready - now accurately classifies user input to tools
+
+### 3. Zero-Code Tool Addition
+
+**Add new capabilities** without changing code:
+
+```bash
+# 1. Add new MCP server to tools.json
+vim tools.json
+
+# 2. Retrain system
+./intentive --train-tools
+
+# 3. Use new capabilities immediately
+./intentive
+```
+
 ## Development Setup
 
 **For development** (requires .NET 9.0 SDK):
@@ -107,49 +173,14 @@ make build
 export OPENAI_API_KEY="your-key"
 export OPENAI_BASE_URL="https://api.groq.com/openai/v1"  # Optional
 
+# First-time setup: train your model
+./intentive --train-tools
+
+# Run the system
 make run
 ```
 
 **Docker is recommended** for trying the implementation - see the Quick Start section above.
-
-## Structure
-
-```
-src/Intentive.Core/     # Core orchestration logic
-src/Intentive.Console/  # CLI interface
-models/                 # ONNX models (MiniLM-L6-v2)
-tests/                  # Tests
-Makefile                # Build targets
-```
-
-## Configuration
-
-Key parameters (environment variables or command line):
-
-- `OPENAI_API_KEY` - API key for LLM escalation
-- `OPENAI_BASE_URL` - Custom endpoint (Groq, Azure, etc.)
-- Intent thresholds in `OrchestrationConfig.cs`:
-  - `ConfidenceThreshold`: 0.7 (ONNX classification confidence)
-  - `AmbiguityThreshold`: 0.5 (triggers LLM escalation)
-  - `RiskThreshold`: 0.8 (high-risk escalation)
-
-## Build Targets
-
-**Local Development:**
-```bash
-make build      # Build solution
-make test       # Run tests  
-make run        # Run with clean console
-make confidence # Full connectivity test
-```
-
-**Docker:**
-```bash
-make docker-build    # Build Docker image
-make docker-run      # Run container (uses your env vars)
-make docker-push     # Push to GitHub Container Registry
-make docker-pull     # Pull published image
-```
 
 ## Performance Observations
 
